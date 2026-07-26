@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="so">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Quoridor 2.0</title>
+    <style>
+        /* ==========================================
+           1. CORE STYLES & THEME
+           ========================================== */
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --accent-blue: #3b82f6;
+            --accent-red: #ef4444;
+            --text-color: #f8fafc;
+            --board-bg: #334155;
+            --tile-bg: #475569;
+            --tile-hover: #64748b;
+            --tile-highlight: #10b981;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #app-container {
+            width: 100%;
+            max-width: 480px;
+            height: 100vh;
+            max-height: 900px;
+            background-color: var(--panel-bg);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        /* ==========================================
+           2. STATE SCREENS
+           ========================================== */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .screen.active {
+            display: flex !important;
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Splash Screen */
+        #splash-screen h1 {
+            font-size: 2.5rem;
+            color: var(--accent-blue);
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 5px solid #FFF;
+            border-bottom-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: rotation 1s linear infinite;
+            margin-top: 20px;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Main Menu Screen */
+        .menu-title {
+            font-size: 2.2rem;
+            margin-bottom: 30px;
+            text-align: center;
+            background: linear-gradient(45deg, var(--accent-blue), var(--accent-red));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .menu-btn {
+            width: 80%;
+            padding: 15px 20px;
+            margin: 10px 0;
+            background-color: var(--board-bg);
+            color: white;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .menu-btn:active {
+            transform: scale(0.95);
+            background-color: var(--accent-blue);
+        }
+
+        /* Game Screen Layout */
+        #game-screen {
+            justify-content: space-between;
+            padding: 15px;
+        }
+
+        .player-info {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--board-bg);
+            padding: 12px 15px;
+            border-radius: 10px;
+            border: 2px solid transparent;
+            transition: border-color 0.3s;
+        }
+
+        .player-info.turn-active {
+            border-color: #f59e0b;
+        }
+
+        .player-badge {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+        }
+
+        .pawn-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+
+        .p1-color { background-color: var(--accent-blue); }
+        .p2-color { background-color: var(--accent-red); }
+
+        .turn-banner {
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: #cbd5e1;
+            text-align: center;
+            margin: 5px 0;
+        }
+
+        /* ==========================================
+           3. BOARD & GAME ELEMENTS
+           ========================================== */
+        #board-wrapper {
+            width: 100%;
+            aspect-ratio: 1;
+            background-color: var(--board-bg);
+            border-radius: 12px;
+            padding: 8px;
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            grid-template-rows: repeat(9, 1fr);
+            gap: 6px;
+            position: relative;
+        }
+
+        .tile {
+            background-color: var(--tile-bg);
+            border-radius: 6px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .tile.highlight {
+            background-color: var(--tile-highlight);
+            animation: pulse 1.2s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .pawn {
+            width: 70%;
+            height: 70%;
+            border-radius: 50%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+        }
+
+        .controls {
+            width: 100%;
+            display: flex;
+            gap: 10px;
+        }
+
+        .ctrl-btn {
+            flex: 1;
+            padding: 12px;
+            background-color: var(--board-bg);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .ctrl-btn:active {
+            background-color: var(--accent-blue);
+        }
+
+        .ctrl-btn.active-mode {
+            background-color: #f59e0b !important;
+            color: #000 !important;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+        }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-card {
+            background-color: var(--panel-bg);
+            border: 2px solid var(--accent-blue);
+            padding: 25px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+
+        .modal-card h2 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            color: #f59e0b;
+        }
+
+        .modal-card p {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+
+        /* Wall Overlays */
+        .wall-h {
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 210%;
+            height: 8px;
+            background-color: #f59e0b;
+            border-radius: 4px;
+            z-index: 10;
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
+            pointer-events: none;
+            animation: wallDrop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .wall-v {
+            position: absolute;
+            right: -5px;
+            top: 0;
+            width: 8px;
+            height: 210%;
+            background-color: #f59e0b;
+            border-radius: 4px;
+            z-index: 10;
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
+            pointer-events: none;
+            animation: wallDrop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes wallDrop {
+            0% { transform: scale(1.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Timer Bar */
+        .timer-container {
+            width: 100%;
+            height: 6px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            margin: 8px 0;
+            overflow: hidden;
+        }
+
+        .timer-bar {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
+            transition: width 1s linear;
+        }
+
+        /* Themes */
+        body.theme-wood {
+            --bg-color: #2c1810;
+            --panel-bg: #422517;
+            --accent-blue: #d97706;
+            --accent-red: #b45309;
+            --board-bg: #543310;
+            --tile-bg: #74512d;
+            --tile-hover: #af8f6f;
+        }
+
+        body.theme-ice {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --accent-blue: #38bdf8;
+            --accent-red: #818cf8;
+            --board-bg: #0284c7;
+            --tile-bg: #e0f2fe;
+            --tile-hover: #bae6fd;
+        }
+
+        body.theme-neon {
+            --bg-color: #050505;
+            --panel-bg: #121212;
+            --accent-blue: #00ffcc;
+            --accent-red: #ff0055;
+            --board-bg: #1a1a1a;
+            --tile-bg: #262626;
+            --tile-hover: #333333;
+        }
+
+        .theme-selector {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            justify-content: center;
+        }
+
+        .theme-btn {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: var(--board-bg);
+            color: white;
+            font-size: 0.85rem;
+            cursor: pointer;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+
+    <!-- WIN MODAL -->
+    <div id="win-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h2 id="win-title">🎉 GUUL!</h2>
+            <p id="win-message">Player 1 ayaa badiyay!</p>
+            <button class="menu-btn" onclick="GameApp.startNewGame()">🔄 Dib U Bilow Game-ka</button>
+            <button class="menu-btn" onclick="GameApp.switchState('MENU')">📋 Menu Main</button>
+        </div>
+    </div>
+
+    <!-- SPLASH SCREEN -->
+    <div id="splash-screen" class="screen active">
+        <h1>QUORIDOR 2.0</h1>
+        <div class="loader"></div>
+    </div>
+
+    <!-- MAIN MENU SCREEN -->
+    <div id="menu-screen" class="screen">
+        <h1 class="menu-title">QUORIDOR 2.0</h1>
+        
+        <div class="theme-selector">
+            <button class="theme-btn" onclick="GameApp.setTheme('default')">🌌 Default</button>
+            <button class="theme-btn" onclick="GameApp.setTheme('wood')">🪵 Wood</button>
+            <button class="theme-btn" onclick="GameApp.setTheme('ice')">❄️ Ice</button>
+            <button class="theme-btn" onclick="GameApp.setTheme('neon')">⚡ Neon</button>
+        </div>
+
+        <button class="menu-btn" onclick="GameApp.startNewGame()">🟢 PLAY OFFLINE</button>
+        <button class="menu-btn" onclick="alert('🚀 Online Mode wuu soo socdaa dhowaan!')">🌐 PLAY ONLINE</button>
+        <button class="menu-btn" onclick="alert('Settings Hada Waa Diyaar Garow!')">⚙️ SETTINGS</button>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="game-screen" class="screen">
+        <!-- Player 2 Top -->
+        <div class="player-info" id="p2-panel">
+            <div class="player-badge">
+                <div class="pawn-icon p2-color"></div>
+                <span>Player 2</span>
+            </div>
+            <div>Walls: <span id="p2-walls">10</span></div>
+        </div>
+
+        <div class="turn-banner" id="turn-indicator">Turn: Player 1 🔵</div>
+        
+        <div class="timer-container">
+            <div id="timer-bar" class="timer-bar"></div>
+        </div>
+
+        <!-- Board 9x9 -->
+        <div id="board-wrapper"></div>
+
+        <!-- Player 1 Bottom -->
+        <div class="player-info" id="p1-panel">
+            <div class="player-badge">
+                <div class="pawn-icon p1-color"></div>
+                <span>Player 1</span>
+            </div>
+            <div>Walls: <span id="p1-walls">10</span></div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <button class="ctrl-btn" onclick="GameApp.switchState('MENU')">📋 MENU</button>
+            <button class="ctrl-btn" id="wall-mode-btn" onclick="GameApp.toggleWallMode()">🧱 WALL: OFF</button>
+            <button class="ctrl-btn" id="wall-type-btn" onclick="GameApp.toggleWallOrientation()" style="display:none;">🔄 JIIF (H)</button>
+            <button class="ctrl-btn" onclick="GameApp.undoMove()">↩️ UNDO</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+/* Web Audio API */
+const SoundFx = {
+    ctx: null,
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    },
+    playMove() {
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.1);
+    },
+    playWall() {
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.15);
+    },
+    playWin() {
+        this.init();
+        const notes = [261.63, 329.63, 392.00, 523.25];
+        notes.forEach((freq, index) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.3, this.ctx.currentTime + index * 0.12);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + index * 0.12 + 0.3);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime + index * 0.12);
+            osc.stop(this.ctx.currentTime + index * 0.12 + 0.3);
+        });
+    }
+};
+
+const GameApp = {
+    currentState: 'SPLASH',
+    timerInterval: null,
+    timeLeft: 30,
+    history: [],
+
+    gameState: {
+        boardSize: 9,
+        p1Pos: { r: 8, c: 4 },
+        p2Pos: { r: 0, c: 4 },
+        p1Walls: 10,
+        p2Walls: 10,
+        turn: 1,
+        selectedPawn: false,
+        validMoves: [],
+        wallMode: false,
+        wallOrientation: 'H',
+        walls: []
+    },
+
+    init() {
+        const savedTheme = localStorage.getItem('quoridor_theme') || 'default';
+        this.setTheme(savedTheme);
+
+        setTimeout(() => {
+            this.switchState('MENU');
+        }, 1200);
+    },
+
+    setTheme(themeName) {
+        document.body.classList.remove('theme-wood', 'theme-ice', 'theme-neon');
+        if (themeName !== 'default') {
+            document.body.classList.add(`theme-${themeName}`);
+        }
+        localStorage.setItem('quoridor_theme', themeName);
+    },
+
+    startNewGame() {
+        this.gameState.p1Pos = { r: 8, c: 4 };
+        this.gameState.p2Pos = { r: 0, c: 4 };
+        this.gameState.p1Walls = 10;
+        this.gameState.p2Walls = 10;
+        this.gameState.turn = 1;
+        this.gameState.selectedPawn = false;
+        this.gameState.validMoves = [];
+        this.gameState.wallMode = false;
+        this.gameState.wallOrientation = 'H';
+        this.gameState.walls = [];
+        this.history = [];
+
+        document.getElementById('win-modal').classList.remove('active');
+        this.switchState('GAME');
+        this.updateUI();
+        this.renderBoard();
+        this.startTimer();
+    },
+
+    saveHistory() {
+        this.history.push(JSON.parse(JSON.stringify(this.gameState)));
+    },
+
+    undoMove() {
+        if (this.history.length === 0) {
+            alert("Sxb dib ma ugu noqon kartid inta ka badan!");
+            return;
+        }
+        this.gameState = this.history.pop();
+        this.updateUI();
+        this.renderBoard();
+        this.resetTimer();
+    },
+
+    startTimer() {
+        clearInterval(this.timerInterval);
+        this.timeLeft = 30;
+        this.updateTimerBar();
+
+        this.timerInterval = setInterval(() => {
+            this.timeLeft--;
+            this.updateTimerBar();
+
+            if (this.timeLeft <= 0) {
+                this.gameState.turn = this.gameState.turn === 1 ? 2 : 1;
+                this.gameState.selectedPawn = false;
+                this.gameState.validMoves = [];
+                this.updateUI();
+                this.renderBoard();
+                this.resetTimer();
+            }
+        }, 1000);
+    },
+
+    resetTimer() {
+        this.startTimer();
+    },
+
+    updateTimerBar() {
+        const bar = document.getElementById('timer-bar');
+        const percentage = (this.timeLeft / 30) * 100;
+        if (bar) bar.style.width = `${percentage}%`;
+    },
+
+    switchState(newState) {
+        this.currentState = newState;
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+
+        if (newState === 'SPLASH') document.getElementById('splash-screen').classList.add('active');
+        if (newState === 'MENU') {
+            clearInterval(this.timerInterval);
+            document.getElementById('menu-screen').classList.add('active');
+        }
+        if (newState === 'GAME') document.getElementById('game-screen').classList.add('active');
+    },
+
+    toggleWallMode() {
+        const currentWalls = this.gameState.turn === 1 ? this.gameState.p1Walls : this.gameState.p2Walls;
+        if (currentWalls <= 0) {
+            alert("Sxb derbi dambe ma haysatid!");
+            return;
+        }
+
+        this.gameState.wallMode = !this.gameState.wallMode;
+        this.gameState.selectedPawn = false;
+        this.gameState.validMoves = [];
+
+        const btnMode = document.getElementById('wall-mode-btn');
+        const btnType = document.getElementById('wall-type-btn');
+
+        if (this.gameState.wallMode) {
+            btnMode.textContent = "🧱 WALL: ON";
+            btnMode.classList.add('active-mode');
+            btnType.style.display = "block";
+        } else {
+            btnMode.textContent = "🧱 WALL: OFF";
+            btnMode.classList.remove('active-mode');
+            btnType.style.display = "none";
+        }
+        this.renderBoard();
+    },
+
+    toggleWallOrientation() {
+        this.gameState.wallOrientation = this.gameState.wallOrientation === 'H' ? 'V' : 'H';
+        const btnType = document.getElementById('wall-type-btn');
+        btnType.textContent = this.gameState.wallOrientation === 'H' ? "🔄 JIIF (H)" : "🔄 ISTAAG (V)";
+    },
+
+    updateUI() {
+        const turnBanner = document.getElementById('turn-indicator');
+        const p1Panel = document.getElementById('p1-panel');
+        const p2Panel = document.getElementById('p2-panel');
+
+        document.getElementById('p1-walls').textContent = this.gameState.p1Walls;
+        document.getElementById('p2-walls').textContent = this.gameState.p2Walls;
+
+        if (this.gameState.turn === 1) {
+            turnBanner.textContent = "Turn: Player 1 🔵";
+            p1Panel.classList.add('turn-active');
+            p2Panel.classList.remove('turn-active');
+        } else {
+            turnBanner.textContent = "Turn: Player 2 🔴";
+            p2Panel.classList.add('turn-active');
+            p1Panel.classList.remove('turn-active');
+        }
+    },
+
+    checkWinCondition() {
+        if (this.gameState.p1Pos.r === 0) {
+            SoundFx.playWin();
+            clearInterval(this.timerInterval);
+            this.showWinScreen("Player 1 🔵");
+            return true;
+        } else if (this.gameState.p2Pos.r === 8) {
+            SoundFx.playWin();
+            clearInterval(this.timerInterval);
+            this.showWinScreen("Player 2 🔴");
+            return true;
+        }
+        return false;
+    },
+
+    showWinScreen(winnerName) {
+        document.getElementById('win-message').textContent = `${winnerName} ayaa hốtay ciyaarta oo badiyay!`;
+        document.getElementById('win-modal').classList.add('active');
+    },
+
+    hasPathToGoal(player, startPos, wallsList) {
+        const targetRow = player === 1 ? 0 : 8;
+        const queue = [{ r: startPos.r, c: startPos.c }];
+        const visited = new Set([`${startPos.r},${startPos.c}`]);
+
+        while (queue.length > 0) {
+            const curr = queue.shift();
+            if (curr.r === targetRow) return true;
+
+            const neighbors = [
+                { r: curr.r - 1, c: curr.c },
+                { r: curr.r + 1, c: curr.c },
+                { r: curr.r, c: curr.c - 1 },
+                { r: curr.r, c: curr.c + 1 }
+            ];
+
+            for (let n of neighbors) {
+                if (n.r >= 0 && n.r < 9 && n.c >= 0 && n.c < 9) {
+                    const key = `${n.r},${n.c}`;
+                    if (!visited.has(key) && !this.isWallBlocking(curr, n, wallsList)) {
+                        visited.add(key);
+                        queue.push(n);
+                    }
+                }
+            }
+        }
+        return false;
+    },
+
+    isWallBlocking(from, to, walls) {
+        for (let w of walls) {
+            if (w.type === 'H') {
+                if ((from.r === w.r && to.r === w.r + 1) || (from.r === w.r + 1 && to.r === w.r)) {
+                    if (from.c === w.c || from.c === w.c + 1) return true;
+                }
+            } else if (w.type === 'V') {
+                if ((from.c === w.c && to.c === w.c + 1) || (from.c === w.c + 1 && to.c === w.c)) {
+                    if (from.r === w.r || from.r === w.r + 1) return true;
+                }
+            }
+        }
+        return false;
+    },
+
+    placeWall(r, c) {
+        const type = this.gameState.wallOrientation;
+        if (r < 0 || r >= 8 || c < 0 || c >= 8) return;
+
+        const isOverlap = this.gameState.walls.some(w => {
+            if (w.r === r && w.c === c) return true;
+            if (w.type === type) {
+                if (type === 'H' && w.r === r && Math.abs(w.c - c) < 2) return true;
+                if (type === 'V' && w.c === c && Math.abs(w.r - r) < 2) return true;
+            }
+            return false;
+        });
+
+        if (isOverlap) {
+            alert("Sxb derbi kale ayaa halkan ku yaal ama ku dul dhacayay!");
+            return;
+        }
+
+        const testWalls = [...this.gameState.walls, { r, c, type }];
+        const p1HasPath = this.hasPathToGoal(1, this.gameState.p1Pos, testWalls);
+        const p2HasPath = this.hasPathToGoal(2, this.gameState.p2Pos, testWalls);
+
+        if (!p1HasPath || !p2HasPath) {
+            alert("Sharciga Ciyaarta: Ma ogolana in waddada oo dhan laga xiro qofka!");
+            return;
+        }
+
+        this.saveHistory();
+        this.gameState.walls.push({ r, c, type });
+        SoundFx.playWall();
+
+        if (this.gameState.turn === 1) {
+            this.gameState.p1Walls--;
+        } else {
+            this.gameState.p2Walls--;
+        }
+
+        this.gameState.wallMode = false;
+        document.getElementById('wall-mode-btn').classList.remove('active-mode');
+        document.getElementById('wall-mode-btn').textContent = "🧱 WALL: OFF";
+        document.getElementById('wall-type-btn').style.display = "none";
+
+        this.gameState.turn = this.gameState.turn === 1 ? 2 : 1;
+        this.updateUI();
+        this.renderBoard();
+        this.resetTimer();
+    },
+
+    getValidMoves(player) {
+        const currentPos = player === 1 ? this.gameState.p1Pos : this.gameState.p2Pos;
+        const opponentPos = player === 1 ? this.gameState.p2Pos : this.gameState.p1Pos;
+        const moves = [];
+
+        const directions = [
+            { r: -1, c: 0 },
+            { r: 1, c: 0 },
+            { r: 0, c: -1 },
+            { r: 0, c: 1 }
+        ];
+
+        directions.forEach(d => {
+            let nr = currentPos.r + d.r;
+            let nc = currentPos.c + d.c;
+
+            if (nr >= 0 && nr < 9 && nc >= 0 && nc < 9) {
+                if (!this.isWallBlocking(currentPos, { r: nr, c: nc }, this.gameState.walls)) {
+                    if (nr === opponentPos.r && nc === opponentPos.c) {
+                        let jumpR = nr + d.r;
+                        let jumpC = nc + d.c;
+                        if (jumpR >= 0 && jumpR < 9 && jumpC >= 0 && jumpC < 9) {
+                            if (!this.isWallBlocking({ r: nr, c: nc }, { r: jumpR, c: jumpC }, this.gameState.walls)) {
+                                moves.push({ r: jumpR, c: jumpC });
+                            }
+                        }
+                    } else {
+                        moves.push({ r: nr, c: nc });
+                    }
+                }
+            }
+        });
+
+        return moves;
+    },
+
+    handleTileClick(r, c) {
+        if (this.gameState.wallMode) {
+            this.placeWall(r, c);
+            return;
+        }
+
+        const currentPos = this.gameState.turn === 1 ? this.gameState.p1Pos : this.gameState.p2Pos;
+
+        if (r === currentPos.r && c === currentPos.c) {
+            this.gameState.selectedPawn = !this.gameState.selectedPawn;
+            this.gameState.validMoves = this.gameState.selectedPawn ? this.getValidMoves(this.gameState.turn) : [];
+            this.renderBoard();
+            return;
+        }
+
+        if (this.gameState.selectedPawn) {
+            const isValid = this.gameState.validMoves.some(m => m.r === r && m.c === c);
+            if (isValid) {
+                this.saveHistory();
+
+                if (this.gameState.turn === 1) {
+                    this.gameState.p1Pos = { r, c };
+                } else {
+                    this.gameState.p2Pos = { r, c };
+                }
+
+                SoundFx.playMove();
+
+                this.gameState.selectedPawn = false;
+                this.gameState.validMoves = [];
+
+                if (!this.checkWinCondition()) {
+                    this.gameState.turn = this.gameState.turn === 1 ? 2 : 1;
+                    this.updateUI();
+                    this.renderBoard();
+                    this.resetTimer();
+                }
+            }
+        }
+    },
+
+    renderBoard() {
+        const board = document.getElementById('board-wrapper');
+        board.innerHTML = '';
+
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                tile.dataset.row = r;
+                tile.dataset.col = c;
+
+                const isHighlight = this.gameState.validMoves.some(m => m.r === r && m.c === c);
+                if (isHighlight) tile.classList.add('highlight');
+
+                if (r === this.gameState.p1Pos.r && c === this.gameState.p1Pos.c) {
+                    const pawn = document.createElement('div');
+                    pawn.className = 'pawn p1-color';
+                    tile.appendChild(pawn);
+                } else if (r === this.gameState.p2Pos.r && c === this.gameState.p2Pos.c) {
+                    const pawn = document.createElement('div');
+                    pawn.className = 'pawn p2-color';
+                    tile.appendChild(pawn);
+                }
+
+                this.gameState.walls.forEach(w => {
+                    if (w.r === r && w.c === c) {
+                        const wallElem = document.createElement('div');
+                        wallElem.className = w.type === 'H' ? 'wall-h' : 'wall-v';
+                        tile.appendChild(wallElem);
+                    }
+                });
+
+                tile.onclick = () => this.handleTileClick(r, c);
+                board.appendChild(tile);
+            }
+        }
+    }
+};
+
+window.onload = () => GameApp.init();
+</script>
+
+</body>
+</html>
